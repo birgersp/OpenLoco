@@ -106,16 +106,25 @@ namespace OpenLoco::Vehicles::PathSignals
         return false;
     }
 
-    bool tryReserve(const EntityId train, const std::span<const RouteStep> route)
+    bool canReserve(const EntityId train, const std::span<const RouteStep> route)
     {
         if (!isEnabled() || train == EntityId::null || route.empty())
         {
             return false;
         }
         const auto owner = toOwner(train);
-        const auto hasReservationConflict = !_reservations.canReserve(owner, route);
-        if (hasReservationConflict || isPhysicallyOccupied(train, route) || !_reservations.tryReserve(owner, route))
+        return _reservations.canReserve(owner, route) && !isPhysicallyOccupied(train, route);
+    }
+
+    bool tryReserve(const EntityId train, const std::span<const RouteStep> route)
+    {
+        if (!isEnabled() || train == EntityId::null || route.empty())
         {
+            return false;
+        }
+        if (!canReserve(train, route))
+        {
+            const auto owner = toOwner(train);
             const auto pending = std::ranges::find(_pendingReservations, owner, &PendingReservation::owner);
             const auto& first = route.front();
             const auto basicTrackAndDirection = static_cast<uint16_t>(first.trackAndDirection & kBasicTrackAndDirectionMask);
@@ -134,6 +143,11 @@ namespace OpenLoco::Vehicles::PathSignals
             {
                 *pending = replacement;
             }
+            return false;
+        }
+        const auto owner = toOwner(train);
+        if (!_reservations.tryReserve(owner, route))
+        {
             return false;
         }
         std::erase_if(_pendingReservations, [owner](const PendingReservation& pending) { return pending.owner == owner; });

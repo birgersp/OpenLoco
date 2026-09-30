@@ -20,6 +20,9 @@ namespace OpenLoco::Vehicles::PathSignals
     /** Converts one routed track piece into resources understood by PBS. */
     RouteStep makeRouteStep(const World::Pos3& pos, uint16_t trackAndDirection);
 
+    /** Checks both existing reservations and live vehicles without changing state. */
+    bool canReserve(EntityId train, std::span<const RouteStep> route);
+
     /**
      * Atomically reserves route for train. If the tail still occupies an older
      * reservation, the new route is appended to it.

@@ -127,6 +127,13 @@ namespace OpenLoco::Vehicles
         uint8_t requiredMods,
         uint8_t queryMods);
 
+    static std::vector<std::vector<PathSignals::RouteStep>> planPathSignalRouteCandidates(
+        VehicleHead& head,
+        World::Pos3 pos,
+        uint16_t connection,
+        uint8_t requiredMods,
+        uint8_t queryMods);
+
     struct WaterPathingResult
     {
         World::Pos2 headTarget;
@@ -4511,6 +4518,149 @@ namespace OpenLoco::Vehicles
         return std::nullopt;
     }
 
+    static bool isSamePathSignalRoute(
+        const std::span<const PathSignals::RouteStep> lhs,
+        const std::span<const PathSignals::RouteStep> rhs)
+    {
+        if (lhs.size() != rhs.size())
+        {
+            return false;
+        }
+        return std::ranges::equal(lhs, rhs, [](const auto& lhsStep, const auto& rhsStep) {
+            return lhsStep.pos == rhsStep.pos
+                && (lhsStep.trackAndDirection & PathSignals::kBasicTrackAndDirectionMask)
+                == (rhsStep.trackAndDirection & PathSignals::kBasicTrackAndDirectionMask);
+        });
+    }
+
+    static void findStationPathSignalRoutes(
+        VehicleHead& head,
+        World::Pos3 pos,
+        uint16_t connection,
+        const uint8_t requiredMods,
+        const uint8_t queryMods,
+        const StationId targetStation,
+        bool reachedTargetStation,
+        std::vector<PathSignals::RouteStep> route,
+        std::unordered_set<uint64_t> visited,
+        std::vector<std::vector<PathSignals::RouteStep>>& candidates)
+    {
+        constexpr size_t kMaxReservationLength = 256;
+        constexpr size_t kMaxReservationCandidates = 16;
+        if (candidates.size() >= kMaxReservationCandidates || route.size() >= kMaxReservationLength)
+        {
+            return;
+        }
+
+        // Do not reserve the signal that protects the following block.
+        if (!route.empty() && (connection & World::Track::AdditionalTaDFlags::hasSignal) != 0)
+        {
+            if (reachedTargetStation)
+            {
+                candidates.push_back(std::move(route));
+            }
+            return;
+        }
+
+        constexpr auto kBasicTaDMask = World::Track::AdditionalTaDFlags::basicTaDMask;
+        const auto routeKey = static_cast<uint64_t>(static_cast<uint16_t>(pos.x))
+            | (static_cast<uint64_t>(static_cast<uint16_t>(pos.y)) << 16)
+            | (static_cast<uint64_t>(static_cast<uint16_t>(pos.z)) << 32)
+            | (static_cast<uint64_t>(connection & kBasicTaDMask) << 48);
+        if (!visited.insert(routeKey).second)
+        {
+            return;
+        }
+
+        route.push_back(PathSignals::makeRouteStep(pos, connection));
+        const auto [nextPos, nextRotation] = World::Track::getTrackConnectionEnd(pos, connection & kBasicTaDMask);
+        const auto nextConnections = World::Track::getTrackConnections(
+            nextPos,
+            nextRotation,
+            head.owner,
+            head.trackType,
+            requiredMods,
+            queryMods);
+        reachedTargetStation |= nextConnections.stationId == targetStation;
+        if (nextConnections.connections.empty())
+        {
+            if (reachedTargetStation)
+            {
+                candidates.push_back(std::move(route));
+            }
+            return;
+        }
+
+        for (const auto nextConnection : nextConnections.connections)
+        {
+            findStationPathSignalRoutes(
+                head,
+                nextPos,
+                nextConnection,
+                requiredMods,
+                queryMods,
+                targetStation,
+                reachedTargetStation,
+                route,
+                visited,
+                candidates);
+            if (candidates.size() >= kMaxReservationCandidates)
+            {
+                return;
+            }
+        }
+    }
+
+    /**
+     * Keeps vanilla's preferred route first, then adds other platforms of the
+     * ordered station that can be reached before the next signal.
+     */
+    static std::vector<std::vector<PathSignals::RouteStep>> planPathSignalRouteCandidates(
+        VehicleHead& head,
+        const World::Pos3 pos,
+        const uint16_t connection,
+        const uint8_t requiredMods,
+        const uint8_t queryMods)
+    {
+        std::vector<std::vector<PathSignals::RouteStep>> candidates;
+        const auto preferred = planPathSignalRoute(head, pos, connection, requiredMods, queryMods);
+        if (preferred.has_value())
+        {
+            candidates.push_back(*preferred);
+        }
+
+        const auto orders = head.getCurrentOrders();
+        const auto* stationOrder = orders.begin()->as<OrderStation>();
+        if (stationOrder == nullptr)
+        {
+            return candidates;
+        }
+
+        std::vector<std::vector<PathSignals::RouteStep>> stationRoutes;
+        findStationPathSignalRoutes(
+            head,
+            pos,
+            connection,
+            requiredMods,
+            queryMods,
+            stationOrder->getStation(),
+            false,
+            {},
+            {},
+            stationRoutes);
+        for (auto& route : stationRoutes)
+        {
+            const auto duplicate = std::ranges::any_of(candidates, [&](const auto& candidate) {
+                return isSamePathSignalRoute(candidate, route);
+            });
+            if (!duplicate)
+            {
+                candidates.push_back(std::move(route));
+            }
+        }
+        return candidates;
+    }
+
     /** Returns whether the train's recent route shows that it is inside a signal block. */
     static bool hasSignalInRoutingHistory(const VehicleHead& head)
     {
@@ -4549,8 +4699,18 @@ namespace OpenLoco::Vehicles
                 break;
         }
 
-        const auto route = planPathSignalRoute(head, pos, connection, requiredMods, queryMods);
-        return route.has_value() && PathSignals::tryReserve(head.id, *route);
+        const auto routes = planPathSignalRouteCandidates(head, pos, connection, requiredMods, queryMods);
+        for (const auto& route : routes)
+        {
+            if (PathSignals::canReserve(head.id, route) && PathSignals::tryReserve(head.id, route))
+            {
+                return true;
+            }
+        }
+
+        // Preserve the preferred route as the pending retry. If every platform
+        // is occupied, normal routing should remain stable until one clears.
+        return !routes.empty() && PathSignals::tryReserve(head.id, routes.front());
     }
 
     // 0x004ACEF1
