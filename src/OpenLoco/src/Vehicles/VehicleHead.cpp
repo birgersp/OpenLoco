@@ -6520,7 +6520,10 @@ namespace OpenLoco::Vehicles
             }
 
             bool shouldReverseTrainCars = false;
-            if (lastBody != nullptr)
+            // Reversing the track direction already turns a lone rail car around. Flipping the car as well
+            // would cancel that rotation, leaving the vehicle facing the old direction and driving backwards.
+            const bool isSingleCarTrain = mode == TransportMode::rail && train.cars.size() == 1;
+            if (lastBody != nullptr && !isSingleCarTrain)
             {
                 auto* lastObj = ObjectManager::get<VehicleObject>(lastBody->objectId);
                 shouldReverseTrainCars = [&lastObj, this]() {
