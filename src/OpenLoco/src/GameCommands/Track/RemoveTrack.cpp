@@ -13,6 +13,7 @@
 #include "Objects/TrackExtraObject.h"
 #include "Objects/TrackObject.h"
 #include "Random.h"
+#include "Vehicles/PathSignals.h"
 #include "Vehicles/Vehicle.h"
 #include "ViewportManager.h"
 
@@ -251,6 +252,10 @@ namespace OpenLoco::GameCommands
 
         if (hasFlags(flags, Flags::apply))
         {
+            if (!hasFlags(flags, Flags::aiAllocated | Flags::ghost))
+            {
+                Vehicles::PathSignals::onRailTopologyChanged();
+            }
             if (!hasFlags(flags, Flags::aiAllocated | Flags::ghost))
             {
                 playTrackRemovalSound(args.pos);

@@ -16,6 +16,7 @@
 #include "Ui/WindowManager.h"
 #include "Vehicles/OrderManager.h"
 #include "Vehicles/Orders.h"
+#include "Vehicles/PathSignals.h"
 #include "Vehicles/RoutingManager.h"
 #include "Vehicles/Vehicle.h"
 #include "Vehicles/Vehicle1.h"
@@ -352,6 +353,9 @@ namespace OpenLoco::VehicleManager
     // 0x004AF06E
     void deleteTrain(Vehicles::VehicleHead& head)
     {
+        // Keep deletion safe even if a future mode-specific pickup path stops
+        // calling VehicleHead::liftUpVehicle(). releaseAll is idempotent.
+        Vehicles::PathSignals::releaseAll(head.id);
         Vehicles::Vehicle train(head);
         EntityId viewportFollowEntity = train.veh2->id;
         auto main = Ui::WindowManager::getMainWindow();

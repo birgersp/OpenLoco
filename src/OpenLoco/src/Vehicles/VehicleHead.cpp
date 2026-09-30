@@ -39,6 +39,7 @@
 #include "Ui/WindowManager.h"
 #include "Vehicles/OrderManager.h"
 #include "Vehicles/Orders.h"
+#include "Vehicles/PathSignals.h"
 #include "Vehicles/RoutingManager.h"
 #include "Vehicles/Vehicle1.h"
 #include "Vehicles/Vehicle2.h"
@@ -58,6 +59,8 @@
 #include <cassert>
 #include <numeric>
 #include <optional>
+#include <unordered_set>
+#include <vector>
 
 using namespace OpenLoco::Literals;
 using namespace OpenLoco::World;
@@ -108,6 +111,21 @@ namespace OpenLoco::Vehicles
     static uint16_t roadPathing(VehicleHead& head, const World::Pos3 pos, const Track::RoadConnections& rc, const uint8_t requiredMods, const uint8_t queryMods, const uint32_t allowedStationTypes, bool isSecondRun, Sub4AC3D3State& state);
     static uint16_t trackLongestPathing(VehicleHead& head, const World::Pos3 pos, const Track::TrackConnections& tc, const uint8_t requiredMods, const uint8_t queryMods);
     static uint16_t trackPathing(VehicleHead& head, const World::Pos3 pos, const Track::TrackConnections& tc, const uint8_t requiredMods, const uint8_t queryMods, bool isSecondRun, Sub4AC3D3State& state);
+
+    /**
+     * Plans the concrete route protected by a path signal.
+     *
+     * Normal Locomotion routing chooses one connection each time the head of a
+     * train reaches a junction. PBS has to make the same choices before the
+     * train enters the block. The resulting steps are kept by PathSignals and
+     * fed back to the normal junction code as the train advances.
+     */
+    static std::optional<std::vector<PathSignals::RouteStep>> planPathSignalRoute(
+        VehicleHead& head,
+        World::Pos3 pos,
+        uint16_t connection,
+        uint8_t requiredMods,
+        uint8_t queryMods);
 
     struct WaterPathingResult
     {
@@ -4429,6 +4447,112 @@ namespace OpenLoco::Vehicles
         setSignalState(targetPos, tad, targetTrackType, lightStateFlags);
     }
 
+    static std::optional<std::vector<PathSignals::RouteStep>> planPathSignalRoute(
+        VehicleHead& head,
+        World::Pos3 pos,
+        uint16_t connection,
+        const uint8_t requiredMods,
+        const uint8_t queryMods)
+    {
+        constexpr size_t kMaxReservationLength = 256;
+        std::vector<PathSignals::RouteStep> route;
+        route.reserve(16);
+        std::unordered_set<uint64_t> visited;
+        visited.reserve(kMaxReservationLength);
+
+        for (size_t i = 0; i < kMaxReservationLength; ++i)
+        {
+            // The first signal is the entrance and belongs to this route. A
+            // later signal protects the following block, so stop before it.
+            if (!route.empty() && (connection & World::Track::AdditionalTaDFlags::hasSignal) != 0)
+            {
+                return route;
+            }
+
+            constexpr auto kBasicTaDMask = World::Track::AdditionalTaDFlags::basicTaDMask;
+            const auto routeKey = static_cast<uint64_t>(static_cast<uint16_t>(pos.x))
+                | (static_cast<uint64_t>(static_cast<uint16_t>(pos.y)) << 16)
+                | (static_cast<uint64_t>(static_cast<uint16_t>(pos.z)) << 32)
+                | (static_cast<uint64_t>(connection & kBasicTaDMask) << 48);
+            if (!visited.insert(routeKey).second)
+            {
+                return std::nullopt;
+            }
+
+            route.push_back(PathSignals::makeRouteStep(pos, connection));
+
+            const auto [nextPos, nextRotation] = World::Track::getTrackConnectionEnd(pos, connection & kBasicTaDMask);
+            auto nextConnections = World::Track::getTrackConnections(
+                nextPos,
+                nextRotation,
+                head.owner,
+                head.trackType,
+                requiredMods,
+                queryMods);
+            if (nextConnections.connections.empty())
+            {
+                return route;
+            }
+
+            pos = nextPos;
+            if (nextConnections.connections.size() == 1)
+            {
+                connection = nextConnections.connections.front();
+            }
+            else
+            {
+                Sub4AC3D3State state{};
+                connection = trackPathing(head, pos, nextConnections, requiredMods, queryMods, false, state);
+            }
+        }
+
+        // A malformed or extremely large unsignalled network should make the
+        // train wait, not leave it protected by a partial reservation.
+        return std::nullopt;
+    }
+
+    /** Returns whether the train's recent route shows that it is inside a signal block. */
+    static bool hasSignalInRoutingHistory(const VehicleHead& head)
+    {
+        auto history = RoutingManager::RingView(head.routingHandle);
+        auto iter = history.begin();
+        for (size_t i = 0; i < Limits::kMaxRoutingsPerVehicle; ++i, --iter)
+        {
+            const auto routing = RoutingManager::getRouting(*iter);
+            if (routing == RoutingManager::kAllocatedButFreeRouting || routing == RoutingManager::kRoutingNull)
+            {
+                return false;
+            }
+            if ((routing & World::Track::AdditionalTaDFlags::hasSignal) != 0)
+            {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /** Reuses a pending plan or creates and reserves a new path for the train. */
+    static bool tryAcquirePathSignalRoute(
+        VehicleHead& head,
+        const World::Pos3& pos,
+        const uint16_t connection,
+        const uint8_t requiredMods,
+        const uint8_t queryMods)
+    {
+        switch (PathSignals::retryPending(head.id, pos, connection))
+        {
+            case PathSignals::PendingReservationResult::reserved:
+                return true;
+            case PathSignals::PendingReservationResult::blocked:
+                return false;
+            case PathSignals::PendingReservationResult::noPendingRoute:
+                break;
+        }
+
+        const auto route = planPathSignalRoute(head, pos, connection, requiredMods, queryMods);
+        return route.has_value() && PathSignals::tryReserve(head.id, *route);
+    }
+
     // 0x004ACEF1
     static Sub4ACEE7Result sub_4ACEF1(VehicleHead& head, uint32_t unk1, uint32_t var_113612C, bool isPlaceDown)
     {
@@ -4548,7 +4672,12 @@ namespace OpenLoco::Vehicles
         uint16_t connection = tc.connections[0];
         if (tc.connections.size() > 1)
         {
-            if (head.var_52 == 1)
+            const auto reserved = PathSignals::getReservedConnection(head.id, nextPos, tc.connections);
+            if (reserved.has_value())
+            {
+                connection = *reserved;
+            }
+            else if (head.var_52 == 1)
             {
                 connection = trackLongestPathing(head, nextPos, tc, requiredMods, queryMods);
             }
@@ -4556,6 +4685,23 @@ namespace OpenLoco::Vehicles
             {
                 Sub4AC3D3State state{};
                 connection = trackPathing(head, nextPos, tc, requiredMods, queryMods, false, state);
+            }
+
+            // Reservations are derived state and are intentionally not written
+            // to legacy save files. A train loaded inside a signal block may
+            // therefore reach a junction without one. Acquire the remainder of
+            // its route here before committing to the selected branch.
+            const auto shouldRebuildReservation = PathSignals::needsRebuild(head.id) || hasSignalInRoutingHistory(head);
+            if (PathSignals::isEnabled()
+                && !reserved.has_value()
+                && shouldRebuildReservation
+                && !isPlaceDown
+                && head.var_5C == 0)
+            {
+                if (!tryAcquirePathSignalRoute(head, nextPos, connection, requiredMods, queryMods))
+                {
+                    return Sub4ACEE7Result{ 3, 0, StationId::null };
+                }
             }
             connection |= (1U << 14);
 
@@ -4613,12 +4759,27 @@ namespace OpenLoco::Vehicles
                 const auto keySignalStateFlags = isPlaceDown ? (SignalStateFlags::occupied)
                                                              : (SignalStateFlags::occupied | SignalStateFlags::occupiedOneWay | SignalStateFlags::blockedNoRoute);
                 const auto signalState = getSignalState(nextPos, tad, head.trackType, 0U) & keySignalStateFlags;
+                bool hasPathReservation = false;
 
-                if ((signalState & SignalStateFlags::blockedNoRoute) != SignalStateFlags::none)
+                if (PathSignals::isEnabled() && !isPlaceDown && head.var_5C == 0)
+                {
+                    if ((signalState & SignalStateFlags::blockedNoRoute) != SignalStateFlags::none)
+                    {
+                        return Sub4ACEE7Result{ 2, 0, StationId::null };
+                    }
+
+                    if (!tryAcquirePathSignalRoute(head, nextPos, connection, requiredMods, queryMods))
+                    {
+                        return Sub4ACEE7Result{ 3, enumValue(signalState), StationId::null };
+                    }
+                    hasPathReservation = true;
+                }
+
+                if (!hasPathReservation && (signalState & SignalStateFlags::blockedNoRoute) != SignalStateFlags::none)
                 {
                     return Sub4ACEE7Result{ 2, 0, StationId::null };
                 }
-                else if ((signalState & SignalStateFlags::occupied) != SignalStateFlags::none)
+                else if (!hasPathReservation && (signalState & SignalStateFlags::occupied) != SignalStateFlags::none)
                 {
                     // 0x004AD3F8
                     const auto reverseSignalState = getSignalState(nextPos, tad, head.trackType, 1U << 31);
@@ -4629,7 +4790,7 @@ namespace OpenLoco::Vehicles
                         return Sub4ACEE7Result{ 3, enumValue(reverseSignalState), StationId::null };
                     }
                 }
-                else
+                else if (!hasPathReservation)
                 {
                     // 0x004AD469
                     if ((train.veh1->var_48 & Flags48::passSignal) != Flags48::none)
@@ -4666,7 +4827,10 @@ namespace OpenLoco::Vehicles
                 }
                 // 0x004AD4B1
 
-                setReverseSignalOccupiedInBlock(nextPos, tad, head.owner, head.trackType);
+                if (!hasPathReservation)
+                {
+                    setReverseSignalOccupiedInBlock(nextPos, tad, head.owner, head.trackType);
+                }
                 if (head.var_5C == 0)
                 {
                     setSignalState(nextPos, tad, head.trackType, 1);
@@ -4687,6 +4851,24 @@ namespace OpenLoco::Vehicles
                         reverseTad._data = reverseRouting & World::Track::AdditionalTaDFlags::basicTaDMask;
                         setSignalState(reversePos, reverseTad, head.trackType, edi);
                         edi = std::min(edi + 1, 3);
+                    }
+                }
+            }
+            else
+            {
+                const auto shouldRebuildPathReservation = PathSignals::isEnabled()
+                    && !isPlaceDown
+                    && head.var_5C == 0
+                    && !PathSignals::hasReservation(head.id)
+                    && (PathSignals::needsRebuild(head.id) || hasSignalInRoutingHistory(head));
+                if (shouldRebuildPathReservation)
+                {
+                    // A real topology edit invalidates complete routes because
+                    // a signal can move their boundary. Rebuild at the first
+                    // piece boundary reached inside the block.
+                    if (!tryAcquirePathSignalRoute(head, nextPos, connection, requiredMods, queryMods))
+                    {
+                        return Sub4ACEE7Result{ 3, 0, StationId::null };
                     }
                 }
             }
@@ -6173,6 +6355,8 @@ namespace OpenLoco::Vehicles
     // 0x004AD93A
     void VehicleHead::sub_4AD93A()
     {
+        PathSignals::releaseAll(id);
+
         if (mode == TransportMode::road)
         {
             roadResetHead(*this);
@@ -6380,6 +6564,8 @@ namespace OpenLoco::Vehicles
     // 0x004ADB47
     void VehicleHead::sub_4ADB47(bool unk)
     {
+        PathSignals::releaseAll(id);
+
         Vehicle train(*this);
         for (auto& car : train.cars)
         {
@@ -7083,6 +7269,8 @@ namespace OpenLoco::Vehicles
         {
             return;
         }
+
+        PathSignals::releaseAll(id);
 
         sub_4AD778();
         Vehicle train(head);

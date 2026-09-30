@@ -148,3 +148,4 @@ Note: Only arm64 builds have been tested.
 - [GitHub](https://github.com/OpenLoco/OpenLoco)
 - [TT-Forums](https://www.tt-forums.net)
 - [Locomotion subreddit](https://www.reddit.com/r/locomotion/)
+- [Experimental path-based signalling](docs/PATH_BASED_SIGNALS.md)

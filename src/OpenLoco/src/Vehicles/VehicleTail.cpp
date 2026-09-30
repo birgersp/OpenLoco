@@ -5,6 +5,7 @@
 #include "Map/TileManager.h"
 #include "Map/Track/Track.h"
 #include "Map/Track/TrackData.h"
+#include "Vehicles/PathSignals.h"
 #include "Vehicles/RoutingManager.h"
 #include "ViewportManager.h"
 
@@ -97,6 +98,11 @@ namespace OpenLoco::Vehicles
         }
         else
         {
+            // The track remains protected until the last vehicle component has
+            // left it. Releasing here, alongside the legacy block update, is
+            // what gives PBS correct behaviour for long trains.
+            PathSignals::releaseStep(getHead(), _oldTilePos, trackAndDir.track._data);
+
             if (ref & (1 << 15))
             {
                 setSignalState(_oldTilePos, trackAndDir.track, trackType, 0);

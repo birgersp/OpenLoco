@@ -14,6 +14,7 @@
 #include "Objects/ObjectManager.h"
 #include "Objects/RoadObject.h"
 #include "Ui/WindowManager.h"
+#include "Vehicles/PathSignals.h"
 #include "Vehicles/RoutingManager.h"
 #include "Vehicles/Vehicle1.h"
 #include "Vehicles/Vehicle2.h"
@@ -23,6 +24,7 @@
 #include "Vehicles/VehicleTail.h"
 #include "ViewportManager.h"
 #include <OpenLoco/Core/Exception.hpp>
+#include <vector>
 
 namespace OpenLoco::Vehicles
 {
@@ -172,6 +174,27 @@ namespace OpenLoco::Vehicles
     void VehicleBase::destroyTrain()
     {
         Vehicle train(this->getHead());
+
+        if (train.head->status != Status::crashed)
+        {
+            std::vector<PathSignals::RouteStep> crashFootprint;
+            if (train.head->mode == TransportMode::rail)
+            {
+                // Capture this before the crash animation reuses bogie tile
+                // coordinates for sub-tile movement. The reservation table
+                // removes duplicate pieces shared by adjacent components.
+                train.applyToComponents([&](const auto& component) {
+                    if (component.tileX != -1)
+                    {
+                        const auto routeStep = PathSignals::makeRouteStep(
+                            component.getTrackLoc(),
+                            component.getTrackAndDirection().track._data);
+                        crashFootprint.push_back(routeStep);
+                    }
+                });
+            }
+            PathSignals::protectCrashFootprint(train.head->id, crashFootprint);
+        }
 
         if (train.head->status != Status::crashed && train.head->status != Status::stuck)
         {

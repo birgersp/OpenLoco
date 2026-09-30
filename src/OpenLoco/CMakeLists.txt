@@ -358,6 +358,8 @@ set(OLOCO_SOURCES
     "${CMAKE_CURRENT_SOURCE_DIR}/src/Ui/Windows/VehicleList.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/Vehicles/OrderManager.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/Vehicles/Orders.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/Vehicles/PathSignalReservations.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/Vehicles/PathSignals.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/Vehicles/Routing.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/Vehicles/RoutingManager.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/Vehicles/Vehicle.cpp"
@@ -710,6 +712,8 @@ set(OLOCO_HEADERS
     "${CMAKE_CURRENT_SOURCE_DIR}/include/OpenLoco/Ui/Windows/News/News.h"
     "${CMAKE_CURRENT_SOURCE_DIR}/include/OpenLoco/Vehicles/OrderManager.h"
     "${CMAKE_CURRENT_SOURCE_DIR}/include/OpenLoco/Vehicles/Orders.h"
+    "${CMAKE_CURRENT_SOURCE_DIR}/include/OpenLoco/Vehicles/PathSignalReservations.h"
+    "${CMAKE_CURRENT_SOURCE_DIR}/include/OpenLoco/Vehicles/PathSignals.h"
     "${CMAKE_CURRENT_SOURCE_DIR}/include/OpenLoco/Vehicles/Routing.h"
     "${CMAKE_CURRENT_SOURCE_DIR}/include/OpenLoco/Vehicles/RoutingManager.h"
     "${CMAKE_CURRENT_SOURCE_DIR}/include/OpenLoco/Vehicles/Vehicle.h"
@@ -772,6 +776,7 @@ set(private_compile_definitions
 )
 
 set(test_files
+    "${CMAKE_CURRENT_SOURCE_DIR}/tests/PathSignalReservationsTests.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/tests/TileManagerTests.cpp"
 )
 

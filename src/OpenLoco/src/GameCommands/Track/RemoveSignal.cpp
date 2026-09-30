@@ -6,6 +6,7 @@
 #include "Map/TrackElement.h"
 #include "Objects/ObjectManager.h"
 #include "Objects/TrainSignalObject.h"
+#include "Vehicles/PathSignals.h"
 #include "Vehicles/Vehicle.h"
 #include "ViewportManager.h"
 
@@ -178,6 +179,10 @@ namespace OpenLoco::GameCommands
 
         if (hasFlags(flags, Flags::apply))
         {
+            if (!hasFlags(flags, Flags::aiAllocated | Flags::ghost))
+            {
+                Vehicles::PathSignals::onRailTopologyChanged();
+            }
             if (!hasFlags(flags, Flags::aiAllocated | Flags::ghost))
             {
                 const Vehicles::TrackAndDirection::_TrackAndDirection tad(args.trackId, args.rotation);

@@ -201,6 +201,10 @@ namespace OpenLoco::Config
         bool displayLockedVehicles = false;
         bool townGrowthDisabled = false;
         bool trainsReverseAtSignals = true;
+        // Experimental and disabled by default. When enabled, railway signals
+        // reserve individual paths instead of treating the whole block as one
+        // indivisible resource.
+        bool enablePathBasedSignals = false;
         bool disableStationSizeLimit = false;
         bool showAiPlanningAsGhosts = false;
         bool keepCargoModifyPickup = false;

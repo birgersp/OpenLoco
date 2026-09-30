@@ -19,6 +19,7 @@
 #include "Objects/RoadObject.h"
 #include "Objects/TrackExtraObject.h"
 #include "Objects/TrackObject.h"
+#include "Vehicles/PathSignals.h"
 #include "World/CompanyManager.h"
 #include "World/StationManager.h"
 #include <OpenLoco/Core/Numerics.hpp>
@@ -580,6 +581,7 @@ namespace OpenLoco::GameCommands
 
         if (hasFlags(flags, Flags::apply) && !hasFlags(flags, Flags::aiAllocated | Flags::ghost))
         {
+            Vehicles::PathSignals::onRailTopologyChanged();
             playConstructionPlacementSound(getPosition());
         }
         return totalCost;

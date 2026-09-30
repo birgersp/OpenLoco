@@ -209,6 +209,7 @@ namespace OpenLoco::Config
         _config.displayLockedVehicles = config["displayLockedVehicles"].as<bool>(false);
         _config.townGrowthDisabled = config["townGrowthDisabled"].as<bool>(false);
         _config.trainsReverseAtSignals = config["trainsReverseAtSignals"].as<bool>(false);
+        _config.enablePathBasedSignals = config["enable_path_based_signals"].as<bool>(false);
         _config.disableStationSizeLimit = config["disableStationSizeLimit"].as<bool>(false);
         _config.showAiPlanningAsGhosts = config["showAiPlanningAsGhosts"].as<bool>(false);
         _config.keepCargoModifyPickup = config["keepCargoModifyPickup"].as<bool>(false);
@@ -350,6 +351,7 @@ namespace OpenLoco::Config
         node["invertRightMouseViewPan"] = _config.invertRightMouseViewPan;
         node["townGrowthDisabled"] = _config.townGrowthDisabled;
         node["trainsReverseAtSignals"] = _config.trainsReverseAtSignals;
+        node["enable_path_based_signals"] = _config.enablePathBasedSignals;
         node["disableStationSizeLimit"] = _config.disableStationSizeLimit;
         node["showAiPlanningAsGhosts"] = _config.showAiPlanningAsGhosts;
         node["keepCargoModifyPickup"] = _config.keepCargoModifyPickup;
