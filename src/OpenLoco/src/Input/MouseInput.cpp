@@ -1649,7 +1649,10 @@ namespace OpenLoco::Input
                 args.push<int16_t>(length);
                 args.push<int16_t>(depth);
             }
-            ViewportInteraction::rightOver(x, y);
+            else
+            {
+                ViewportInteraction::rightOver(x, y);
+            }
         }
 
         if (Input::state() == Input::State::resizing)
