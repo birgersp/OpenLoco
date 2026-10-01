@@ -70,7 +70,7 @@ namespace OpenLoco::Ui::Windows::Construction
 
         uint8_t signalList[17];          // 0x0113601D
         uint8_t lastSelectedSignal;      // 0x0113602E
-        uint8_t isSignalBothDirections;  // 0x0113602F
+        uint8_t isSignalBothDirections = 1;  // 0x0113602F
         uint8_t signalPlacementStepSize; // new
         bool repeatedSignalMode;         // new
 

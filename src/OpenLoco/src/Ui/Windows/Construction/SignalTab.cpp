@@ -440,7 +440,9 @@ namespace OpenLoco::Ui::Windows::Construction::Signal
     void tabReset(Window& self)
     {
         self.holdableWidgets = kHoldableWidgets;
-        self.callOnMouseDown(Signal::widx::both_directions, self.widgets[Signal::widx::both_directions].id);
+        const auto& cState = getConstructionState();
+        const auto direction = cState.isSignalBothDirections ? Signal::widx::both_directions : Signal::widx::single_direction;
+        self.callOnMouseDown(direction, self.widgets[direction].id);
     }
 
     static constexpr WindowEventList kEvents = {
