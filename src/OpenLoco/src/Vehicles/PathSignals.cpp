@@ -74,7 +74,7 @@ namespace OpenLoco::Vehicles::PathSignals
     }
 
     /** Checks live vehicle components in case derived reservations are incomplete. */
-    static bool isPhysicallyOccupied(const EntityId train, const std::span<const RouteStep> route)
+    static bool isPhysicallyOccupied(const std::span<const RouteStep> route)
     {
         for (const auto& step : route)
         {
@@ -83,7 +83,7 @@ namespace OpenLoco::Vehicles::PathSignals
                 for (auto* entity : EntityManager::EntityTileList(World::Pos2{ resource.pos }))
                 {
                     const auto* vehicle = entity->asBase<VehicleBase>();
-                    if (vehicle == nullptr || vehicle->getHead() == train || vehicle->mode != TransportMode::rail)
+                    if (vehicle == nullptr || vehicle->mode != TransportMode::rail)
                     {
                         continue;
                     }
@@ -113,7 +113,7 @@ namespace OpenLoco::Vehicles::PathSignals
             return false;
         }
         const auto owner = toOwner(train);
-        return _reservations.canReserve(owner, route) && !isPhysicallyOccupied(train, route);
+        return _reservations.canReserve(owner, route) && !isPhysicallyOccupied(route);
     }
 
     bool tryReserve(const EntityId train, const std::span<const RouteStep> route)
@@ -178,7 +178,7 @@ namespace OpenLoco::Vehicles::PathSignals
             return PendingReservationResult::noPendingRoute;
         }
         const auto hasReservationConflict = !_reservations.canReserve(owner, pending->route);
-        if (hasReservationConflict || isPhysicallyOccupied(train, pending->route) || !_reservations.tryReserve(owner, pending->route))
+        if (hasReservationConflict || isPhysicallyOccupied(pending->route) || !_reservations.tryReserve(owner, pending->route))
         {
             return PendingReservationResult::blocked;
         }

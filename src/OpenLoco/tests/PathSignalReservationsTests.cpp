@@ -91,6 +91,30 @@ TEST(PathSignalReservationsTest, ExtendsReservationWithoutReleasingTrackBehindTa
     EXPECT_FALSE(reservations.tryReserve(2, conflictsAhead));
 }
 
+TEST(PathSignalReservationsTest, RejectsNewPathAcrossOwnersRetainedTrack)
+{
+    ReservationTable reservations;
+    constexpr World::Pos3 kCrossing{ 32, 32, 0 };
+    const RouteStep retained{
+        { 0, 0, 0 },
+        0,
+        { TrackResource{ kCrossing, 0b0000'0011 } },
+    };
+    const RouteStep crossesRetained{
+        { 32, 0, 0 },
+        8,
+        { TrackResource{ kCrossing, 0b0000'0010 } },
+    };
+
+    ASSERT_TRUE(reservations.tryReserve(1, std::vector{ retained }));
+    EXPECT_FALSE(reservations.canReserve(1, std::vector{ crossesRetained }));
+    EXPECT_FALSE(reservations.tryReserve(1, std::vector{ crossesRetained }));
+
+    // Retrying an identical step remains idempotent.
+    EXPECT_TRUE(reservations.tryReserve(1, std::vector{ retained }));
+    EXPECT_EQ(reservations.reservationCount(), 1u);
+}
+
 TEST(PathSignalReservationsTest, ReturnsLiveConnectionFlagsForReservedJunction)
 {
     ReservationTable reservations;

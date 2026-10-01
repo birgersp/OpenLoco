@@ -324,7 +324,7 @@ namespace OpenLoco::World::Track
                 continue;
             }
 
-            result.connections.push_back(connection);
+            StationId connectionStationId = StationId::null;
             if (elTrack->hasStationElement())
             {
                 auto* elStation = el.next()->as<StationElement>();
@@ -332,10 +332,13 @@ namespace OpenLoco::World::Track
                 {
                     if (!elStation->isAiAllocated() && !elStation->isGhost())
                     {
-                        result.stationId = elStation->stationId();
+                        connectionStationId = elStation->stationId();
+                        result.stationId = connectionStationId;
                     }
                 }
             }
+            result.connections.push_back(connection);
+            result.stationIds.push_back(connectionStationId);
 
             if (elTrack->hasLevelCrossing())
             {
@@ -390,16 +393,19 @@ namespace OpenLoco::World::Track
                 continue;
             }
 
-            result.connections.push_back(connection);
+            StationId connectionStationId = StationId::null;
             if (elTrack->hasStationElement())
             {
                 auto* elStation = el.next()->as<StationElement>();
                 if (elStation != nullptr)
                 {
                     // No need to consider aiAllocated or ghost flags
-                    result.stationId = elStation->stationId();
+                    connectionStationId = elStation->stationId();
+                    result.stationId = connectionStationId;
                 }
             }
+            result.connections.push_back(connection);
+            result.stationIds.push_back(connectionStationId);
 
             if (elTrack->hasLevelCrossing())
             {

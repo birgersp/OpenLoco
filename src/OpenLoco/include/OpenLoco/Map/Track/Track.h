@@ -54,6 +54,9 @@ namespace OpenLoco::World::Track
     struct TrackConnections
     {
         sfl::static_vector<uint16_t, 16> connections;
+        // Parallel to connections. Unlike stationId, this identifies the
+        // station attached to each individual branch at a junction.
+        sfl::static_vector<StationId, 16> stationIds;
         bool hasLevelCrossing = false;         // 0x0113607D
         StationId stationId = StationId::null; // 0x01135FAE
     };

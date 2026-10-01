@@ -4009,7 +4009,7 @@ namespace OpenLoco::Vehicles
                 {
                     TrackAndDirection::_TrackAndDirection signaledTad = tad;
                     signaledTad._data |= (routing & World::Track::AdditionalTaDFlags::hasSignal);
-                    sub_4A2AD7(pos, signaledTad, companyId, trackObjId);
+                    updateSignalBlockOccupancy(pos, signaledTad, companyId, trackObjId);
                 }
                 if (handle != veh2.routingHandle)
                 {
@@ -4543,14 +4543,18 @@ namespace OpenLoco::Vehicles
         bool reachedTargetStation,
         std::vector<PathSignals::RouteStep> route,
         std::unordered_set<uint64_t> visited,
+        size_t& remainingExpansions,
         std::vector<std::vector<PathSignals::RouteStep>>& candidates)
     {
         constexpr size_t kMaxReservationLength = 256;
         constexpr size_t kMaxReservationCandidates = 16;
-        if (candidates.size() >= kMaxReservationCandidates || route.size() >= kMaxReservationLength)
+        if (candidates.size() >= kMaxReservationCandidates
+            || route.size() >= kMaxReservationLength
+            || remainingExpansions == 0)
         {
             return;
         }
+        --remainingExpansions;
 
         // Do not reserve the signal that protects the following block.
         if (!route.empty() && (connection & World::Track::AdditionalTaDFlags::hasSignal) != 0)
@@ -4581,7 +4585,6 @@ namespace OpenLoco::Vehicles
             head.trackType,
             requiredMods,
             queryMods);
-        reachedTargetStation |= nextConnections.stationId == targetStation;
         if (nextConnections.connections.empty())
         {
             if (reachedTargetStation)
@@ -4591,8 +4594,9 @@ namespace OpenLoco::Vehicles
             return;
         }
 
-        for (const auto nextConnection : nextConnections.connections)
+        for (size_t i = 0; i < nextConnections.connections.size(); ++i)
         {
+            const auto nextConnection = nextConnections.connections[i];
             findStationPathSignalRoutes(
                 head,
                 nextPos,
@@ -4600,11 +4604,12 @@ namespace OpenLoco::Vehicles
                 requiredMods,
                 queryMods,
                 targetStation,
-                reachedTargetStation,
+                reachedTargetStation || nextConnections.stationIds[i] == targetStation,
                 route,
                 visited,
+                remainingExpansions,
                 candidates);
-            if (candidates.size() >= kMaxReservationCandidates)
+            if (candidates.size() >= kMaxReservationCandidates || remainingExpansions == 0)
             {
                 return;
             }
@@ -4636,6 +4641,10 @@ namespace OpenLoco::Vehicles
             return candidates;
         }
 
+        // This limit applies to the complete DFS rather than each branch. It
+        // bounds work even when a dense network has no route to the station.
+        constexpr size_t kMaxStationRouteSearchExpansions = 4096;
+        size_t remainingExpansions = kMaxStationRouteSearchExpansions;
         std::vector<std::vector<PathSignals::RouteStep>> stationRoutes;
         findStationPathSignalRoutes(
             head,
@@ -4647,6 +4656,7 @@ namespace OpenLoco::Vehicles
             false,
             {},
             {},
+            remainingExpansions,
             stationRoutes);
         for (auto& route : stationRoutes)
         {
@@ -6545,7 +6555,7 @@ namespace OpenLoco::Vehicles
             {
                 TrackAndDirection::_TrackAndDirection signaledTad = tad;
                 signaledTad._data |= (routing & World::Track::AdditionalTaDFlags::hasSignal);
-                sub_4A2AD7(pos, signaledTad, companyId, trackObjId);
+                updateSignalBlockOccupancy(pos, signaledTad, companyId, trackObjId);
             }
             if (handle != veh1.routingHandle)
             {
@@ -7559,8 +7569,8 @@ namespace OpenLoco::Vehicles
                 reversePos -= World::Pos3{ World::kRotationOffset[trackSize.rotationEnd], 0 };
             }
 
-            sub_4A2AD7(reversePos, reverseTad, head.owner, head.trackType);
-            sub_4A2AD7(pos, tad, head.owner, head.trackType);
+            updateSignalBlockOccupancy(reversePos, reverseTad, head.owner, head.trackType);
+            updateSignalBlockOccupancy(pos, tad, head.owner, head.trackType);
         }
         return unkFlag;
     }

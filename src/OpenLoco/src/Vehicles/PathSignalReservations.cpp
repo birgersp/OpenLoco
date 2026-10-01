@@ -31,6 +31,11 @@ namespace OpenLoco::Vehicles::PathSignals
 
         for (const auto& step : route)
         {
+            const auto reservation = _reservations.find(owner);
+            const auto alreadyReserved = reservation != _reservations.end()
+                && std::ranges::any_of(reservation->second.route, [&](const RouteStep& candidate) {
+                       return isSameTrackPiece(candidate, step.pos, step.trackAndDirection);
+                   });
             for (const auto& resource : step.resources)
             {
                 const auto claims = _claimsByPosition.find(resourceKey(resource.pos));
@@ -39,7 +44,8 @@ namespace OpenLoco::Vehicles::PathSignals
                     continue;
                 }
                 const auto conflicts = std::ranges::any_of(claims->second, [&](const ResourceClaim& claim) {
-                    return claim.owner != owner && (claim.connectionMask & resource.connectionMask) != 0;
+                    const auto overlaps = (claim.connectionMask & resource.connectionMask) != 0;
+                    return overlaps && (claim.owner != owner || !alreadyReserved);
                 });
                 if (conflicts)
                 {
