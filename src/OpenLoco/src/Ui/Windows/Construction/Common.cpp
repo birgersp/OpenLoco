@@ -33,6 +33,8 @@
 #include "Ui/Windows/Construction/Construction.h"
 #include "World/CompanyManager.h"
 #include "World/StationManager.h"
+#include <algorithm>
+#include <span>
 
 using namespace OpenLoco::World;
 using namespace OpenLoco::World::TileManager;
@@ -41,6 +43,15 @@ namespace OpenLoco::Ui::Windows::Construction
 {
     static ConstructionState _constructionState;       // 0x01135F3E
     static GhostVisibilityFlags _ghostVisibilityFlags; // 0x00522096
+
+    static uint8_t restoreLastSelection(uint8_t& lastSelection, const std::span<const uint8_t> availableObjects)
+    {
+        if (std::find(availableObjects.begin(), availableObjects.end(), lastSelection) == availableObjects.end())
+        {
+            lastSelection = availableObjects.empty() ? 0xFF : availableObjects.front();
+        }
+        return lastSelection;
+    }
 
     static Window* nonTrackWindow()
     {
@@ -89,26 +100,12 @@ namespace OpenLoco::Ui::Windows::Construction
         const auto signalList = getAvailableCompatibleSignals(cState.trackType);
         Common::copyToLegacyList(signalList, cState.signalList);
 
-        auto lastSignal = Scenario::getConstruction().signals[cState.trackType];
-
-        if (lastSignal == 0xFF)
-        {
-            lastSignal = cState.signalList[0];
-        }
-
-        cState.lastSelectedSignal = lastSignal;
+        cState.lastSelectedSignal = restoreLastSelection(Scenario::getConstruction().signals[cState.trackType], signalList);
 
         const auto stationList = getAvailableCompatibleStations(cState.trackType, TransportMode::rail);
         Common::copyToLegacyList(stationList, cState.stationList);
 
-        auto lastStation = Scenario::getConstruction().trainStations[cState.trackType];
-
-        if (lastStation == 0xFF)
-        {
-            lastStation = cState.stationList[0];
-        }
-
-        cState.lastSelectedStationType = lastStation;
+        cState.lastSelectedStationType = restoreLastSelection(Scenario::getConstruction().trainStations[cState.trackType], stationList);
 
         const auto bridgeList = getAvailableCompatibleBridges(cState.trackType, TransportMode::rail);
         Common::copyToLegacyList(bridgeList, cState.bridgeList);
@@ -151,14 +148,7 @@ namespace OpenLoco::Ui::Windows::Construction
         const auto stationList = getAvailableCompatibleStations(cState.trackType, TransportMode::road);
         Common::copyToLegacyList(stationList, cState.stationList);
 
-        auto lastStation = Scenario::getConstruction().roadStations[(cState.trackType & ~(1ULL << 7))];
-
-        if (lastStation == 0xFF)
-        {
-            lastStation = cState.stationList[0];
-        }
-
-        cState.lastSelectedStationType = lastStation;
+        cState.lastSelectedStationType = restoreLastSelection(Scenario::getConstruction().roadStations[(cState.trackType & ~(1ULL << 7))], stationList);
 
         const auto bridgeList = getAvailableCompatibleBridges(cState.trackType, TransportMode::road);
         Common::copyToLegacyList(bridgeList, cState.bridgeList);
@@ -300,26 +290,12 @@ namespace OpenLoco::Ui::Windows::Construction
 
         const auto signalList = getAvailableCompatibleSignals(cState.trackType);
         Common::copyToLegacyList(signalList, cState.signalList);
-        auto lastSignal = Scenario::getConstruction().signals[cState.trackType];
-
-        if (lastSignal == 0xFF)
-        {
-            lastSignal = cState.signalList[0];
-        }
-
-        cState.lastSelectedSignal = lastSignal;
+        cState.lastSelectedSignal = restoreLastSelection(Scenario::getConstruction().signals[cState.trackType], signalList);
 
         const auto stationList = getAvailableCompatibleStations(cState.trackType, TransportMode::rail);
         Common::copyToLegacyList(stationList, cState.stationList);
 
-        auto lastStation = Scenario::getConstruction().trainStations[cState.trackType];
-
-        if (lastStation == 0xFF)
-        {
-            lastStation = cState.stationList[0];
-        }
-
-        cState.lastSelectedStationType = lastStation;
+        cState.lastSelectedStationType = restoreLastSelection(Scenario::getConstruction().trainStations[cState.trackType], stationList);
 
         const auto bridgeList = getAvailableCompatibleBridges(cState.trackType, TransportMode::rail);
         Common::copyToLegacyList(bridgeList, cState.bridgeList);
@@ -405,14 +381,7 @@ namespace OpenLoco::Ui::Windows::Construction
         const auto stationList = getAvailableCompatibleStations(cState.trackType, TransportMode::road);
         Common::copyToLegacyList(stationList, cState.stationList);
 
-        auto lastStation = Scenario::getConstruction().roadStations[(cState.trackType & ~(1ULL << 7))];
-
-        if (lastStation == 0xFF)
-        {
-            lastStation = cState.stationList[0];
-        }
-
-        cState.lastSelectedStationType = lastStation;
+        cState.lastSelectedStationType = restoreLastSelection(Scenario::getConstruction().roadStations[(cState.trackType & ~(1ULL << 7))], stationList);
 
         const auto bridgeList = getAvailableCompatibleBridges(cState.trackType, TransportMode::road);
         Common::copyToLegacyList(bridgeList, cState.bridgeList);
@@ -1359,12 +1328,7 @@ namespace OpenLoco::Ui::Windows::Construction
             const auto stationList = getAvailableCompatibleStations(cState.trackType, TransportMode::road);
             copyToLegacyList(stationList, cState.stationList);
 
-            auto lastStation = Scenario::getConstruction().roadStations[(cState.trackType & ~(1ULL << 7))];
-            if (lastStation == 0xFF)
-            {
-                lastStation = cState.stationList[0];
-            }
-            cState.lastSelectedStationType = lastStation;
+            cState.lastSelectedStationType = restoreLastSelection(Scenario::getConstruction().roadStations[(cState.trackType & ~(1ULL << 7))], stationList);
 
             const auto bridgeList = getAvailableCompatibleBridges(cState.trackType, TransportMode::road);
             copyToLegacyList(bridgeList, cState.bridgeList);
