@@ -203,6 +203,7 @@ namespace OpenLoco::GameCommands
         auto& trackPiece = trackPieces[args.index];
 
         const auto trackStart = args.pos - World::Pos3{ Math::Vector::rotate(World::Pos2{ trackPiece.x, trackPiece.y }, args.rotation), trackPiece.z };
+        const auto trackOwner = elTrack->owner();
 
         // NB: moved out of the loop below (was at 0x0049CC1B)
         const currency32_t pieceRemovalCost = trackRemoveCost(args, trackPieces[0], trackStart, flags);
@@ -253,6 +254,8 @@ namespace OpenLoco::GameCommands
         {
             if (!hasFlags(flags, Flags::aiAllocated | Flags::ghost))
             {
+                const Vehicles::TrackAndDirection::_TrackAndDirection trackAndDirection(args.trackId, args.rotation);
+                Vehicles::updateSignalBlockOccupancyAroundTrack(trackStart, trackAndDirection, trackOwner, args.trackObjectId);
                 playTrackRemovalSound(args.pos);
             }
         }

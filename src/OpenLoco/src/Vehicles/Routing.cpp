@@ -859,7 +859,7 @@ namespace OpenLoco::Vehicles
     }
 
     // 0x004A2AD7
-    void sub_4A2AD7(const World::Pos3& loc, const TrackAndDirection::_TrackAndDirection trackAndDirection, const CompanyId company, const uint8_t trackType)
+    void updateSignalBlockOccupancy(const World::Pos3& loc, const TrackAndDirection::_TrackAndDirection trackAndDirection, const CompanyId company, const uint8_t trackType)
     {
         // 0x001135F88
         uint16_t routingTransformData = 0;
@@ -877,6 +877,30 @@ namespace OpenLoco::Vehicles
             trackType,
             filterFunction,
             transformFunction);
+    }
+
+    void updateSignalBlockOccupancyAroundTrack(const World::Pos3& trackStart, const TrackAndDirection::_TrackAndDirection trackAndDirection, const CompanyId company, const uint8_t trackType)
+    {
+        const auto updateConnectedBlocks = [company, trackType](const World::Pos3& connectionLoc, const uint8_t connectionRotation) {
+            const auto connections = World::Track::getTrackConnections(connectionLoc, connectionRotation, company, trackType, 0, 0);
+            for (const auto connection : connections.connections)
+            {
+                TrackAndDirection::_TrackAndDirection connectedTrack{ 0, 0 };
+                connectedTrack._data = connection & World::Track::AdditionalTaDFlags::basicTaDWithSignalMask;
+                updateSignalBlockOccupancy(connectionLoc, connectedTrack, company, trackType);
+            }
+        };
+
+        const auto [trackEnd, endRotation] = World::Track::getTrackConnectionEnd(trackStart, trackAndDirection._data);
+        updateConnectedBlocks(trackEnd, endRotation);
+
+        const auto& trackSize = World::TrackData::getUnkTrack(trackAndDirection._data);
+        auto trackBegin = trackStart + trackSize.pos;
+        if (trackSize.rotationEnd < 12)
+        {
+            trackBegin -= World::Pos3{ World::kRotationOffset[trackSize.rotationEnd], 0 };
+        }
+        updateConnectedBlocks(trackBegin, World::kReverseRotation[trackSize.rotationEnd]);
     }
 
     // 0x004A2A39

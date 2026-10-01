@@ -19,6 +19,7 @@
 #include "Objects/RoadObject.h"
 #include "Objects/TrackExtraObject.h"
 #include "Objects/TrackObject.h"
+#include "Vehicles/Vehicle.h"
 #include "World/CompanyManager.h"
 #include "World/StationManager.h"
 #include <OpenLoco/Core/Numerics.hpp>
@@ -580,6 +581,8 @@ namespace OpenLoco::GameCommands
 
         if (hasFlags(flags, Flags::apply) && !hasFlags(flags, Flags::aiAllocated | Flags::ghost))
         {
+            const Vehicles::TrackAndDirection::_TrackAndDirection trackAndDirection(args.trackId, args.rotation);
+            Vehicles::updateSignalBlockOccupancyAroundTrack(args.pos, trackAndDirection, getUpdatingCompanyId(), args.trackObjectId);
             playConstructionPlacementSound(getPosition());
         }
         return totalCost;
