@@ -580,6 +580,40 @@ namespace OpenLoco::Ui::ViewportInteraction
         return true;
     }
 
+    static void preferSignalInteraction(InteractionArg& interaction, const Point& mousePos, const Viewport* viewport)
+    {
+        if ((interaction.type != InteractionItem::track && interaction.type != InteractionItem::trackExtra)
+            || !Windows::Construction::isSignalTabOpen() || viewport == nullptr)
+        {
+            return;
+        }
+
+        auto* trackEntry = reinterpret_cast<World::TileElementEntry*>(interaction.object);
+        auto* track = trackEntry->as<TrackElement>();
+        if (track == nullptr || track->isGhost() || !track->hasSignal() || track->owner() != CompanyManager::getControllingId())
+        {
+            return;
+        }
+
+        auto* signalEntry = trackEntry->next();
+        auto* signal = signalEntry->as<SignalElement>();
+        if (signal == nullptr || signal->isGhost())
+        {
+            return;
+        }
+
+        Windows::Construction::Common::setNextAndPreviousTrackTile(*track, interaction.pos);
+        const auto isRightSignal = Windows::Construction::Common::isPointCloserToNextOrPreviousTile(mousePos, *viewport);
+
+        interaction.object = signalEntry;
+        interaction.type = InteractionItem::signal;
+        interaction.modId = isRightSignal && signal->getRight().hasSignal() ? 1 : 0;
+        if (interaction.modId == 0 && !signal->getLeft().hasSignal())
+        {
+            interaction.modId = 1;
+        }
+    }
+
     // 0x004CDD8C
     static bool rightOverTrainStation(InteractionArg& interaction)
     {
@@ -1007,6 +1041,7 @@ namespace OpenLoco::Ui::ViewportInteraction
         bool hasInteraction = false;
         auto res = getMapCoordinatesFromPos(x, y, interactionsToExclude);
         auto& interaction = res.first;
+        preferSignalInteraction(interaction, screenPos, res.second);
         switch (interaction.type)
         {
             case InteractionItem::track:
